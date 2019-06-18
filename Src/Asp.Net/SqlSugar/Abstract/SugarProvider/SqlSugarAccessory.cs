@@ -22,9 +22,9 @@ namespace SqlSugar
                 _Context = value;
             }
         }
-
+        public SqlSugarClient Root { get; set; }
         public ConnectionConfig CurrentConnectionConfig { get; set; }
-        public Dictionary<string, object> TempItems { get { if (_TempItems == null) { _TempItems = new Dictionary<string, object>(); }  return _TempItems; } set=>_TempItems=value; }
+        public Dictionary<string, object> TempItems { get { if (_TempItems == null) { _TempItems = new Dictionary<string, object>(); }  return _TempItems; } set { _TempItems = value; } }
         public bool IsSystemTablesConfig { get { return this.CurrentConnectionConfig.InitKeyType == InitKeyType.SystemTable; } }
         public Guid ContextID { get; set; }
         public MappingTableList MappingTables { get; set; }
@@ -291,6 +291,11 @@ namespace SqlSugar
             sqlBuilder.UpdateBuilder.LambdaExpressions = InstanceFactory.GetLambdaExpressions(this.CurrentConnectionConfig);
             sqlBuilder.Context = result.SqlBuilder.UpdateBuilder.Context = this;
             result.Init();
+            var ignoreColumns = result.EntityInfo.Columns.Where(it => it.IsOnlyIgnoreUpdate).ToList();
+            if (ignoreColumns!=null&&ignoreColumns.Any())
+            {
+                result = (UpdateableProvider<T>)result.IgnoreColumns(ignoreColumns.Select(it=>it.PropertyName).ToArray());
+            }
             return result;
         }
 

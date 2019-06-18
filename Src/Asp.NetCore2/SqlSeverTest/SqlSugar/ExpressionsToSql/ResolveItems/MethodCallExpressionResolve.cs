@@ -1,5 +1,6 @@
 ﻿using SqlSugar;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
@@ -413,6 +414,14 @@ namespace SqlSugar
             {
                 parameter.CommonTempData = DateTime.Now.Date;
             }
+            else if (IsDateDate(item))
+            {
+                parameter.CommonTempData = GetNewExpressionValue(item);
+            }
+            else if (IsDateValue(item))
+            {
+                parameter.CommonTempData = GetNewExpressionValue(item);
+            }
             else if (model.Name == "ToString" && item is ConstantExpression && (item as ConstantExpression).Type.IsEnum())
             {
                 parameter.CommonTempData = item.ToString();
@@ -439,6 +448,10 @@ namespace SqlSugar
                     methodCallExpressionArgs.IsMember = false;
                 }
             }
+            if (IsDateDate(item)||IsDateValue(item))
+            {
+                methodCallExpressionArgs.IsMember = true;
+            }
             if (methodCallExpressionArgs.IsMember == false && (item is MethodCallExpression && item.ToString() == "GetDate()") || (item is UnaryExpression && ((UnaryExpression)item).Operand.ToString() == "GetDate()"))
             {
                 var parameterName = this.Context.SqlParameterKeyWord + ExpressionConst.MethodConst + this.Context.ParameterIndex;
@@ -456,6 +469,20 @@ namespace SqlSugar
             }
             model.Args.Add(methodCallExpressionArgs);
             parameter.ChildExpression = null;
+        }
+
+        private static bool IsDateDate(Expression item)
+        {
+            return item.Type == UtilConstants.DateType && item is MemberExpression && (item as MemberExpression).Member.Name == "Date"&&item.ToString()!= "DateTime.Now.Date";
+        }
+        private static bool IsDateValue(Expression item)
+        {
+            return item.Type == UtilConstants.IntType && 
+                                    item is MemberExpression && 
+                                    (item as MemberExpression).Expression!=null&&
+                                    (item as MemberExpression).Expression.Type==UtilConstants.DateType&&
+                                    (item as MemberExpression).Expression is MemberExpression&&
+                                    ((item as MemberExpression).Expression as MemberExpression).Member.Name=="Value";
         }
 
         private object GetMethodValue(string name, MethodCallExpressionModel model)
@@ -502,9 +529,41 @@ namespace SqlSugar
                     case "Contains":
                         return this.Context.DbMehtods.Contains(model);
                     case "ContainsArray":
+                        if (model.Args[0].MemberValue == null)
+                        {
+                            var first = this.Context.Parameters.FirstOrDefault(it => it.ParameterName == model.Args[0].MemberName.ObjToString());
+                            if (first.HasValue())
+                            {
+                                model.Args[0].MemberValue = first.Value;
+                            }
+                        }
                         var caResult = this.Context.DbMehtods.ContainsArray(model);
                         this.Context.Parameters.RemoveAll(it => it.ParameterName == model.Args[0].MemberName.ObjToString());
                         return caResult;
+                    case "ContainsArrayUseSqlParameters":
+                        if (model.Args[0].MemberValue == null)
+                        {
+                            var first = this.Context.Parameters.FirstOrDefault(it => it.ParameterName == model.Args[0].MemberName.ObjToString());
+                            if (first.HasValue())
+                            {
+                                model.Args[0].MemberValue = first.Value;
+                            }
+                        }
+                        model.Data =this.Context.SqlParameterKeyWord+"INP_"+this.Context.ParameterIndex;
+                        this.Context.ParameterIndex++;
+                        if (model.Args[0].MemberValue.HasValue())
+                        {
+                            var inValueIEnumerable = (IEnumerable)model.Args[0].MemberValue;
+                            int i = 0;
+                            foreach (var item in inValueIEnumerable) 
+                            {
+                                this.Context.Parameters.Add(new SugarParameter(model.Data+"_"+i,item));
+                                i++;
+                            }
+                        }
+                        var caResult2 = this.Context.DbMehtods.ContainsArrayUseSqlParameters(model);
+                        this.Context.Parameters.RemoveAll(it => it.ParameterName == model.Args[0].MemberName.ObjToString());
+                        return caResult2;
                     case "Equals":
                         return this.Context.DbMehtods.Equals(model);
                     case "DateIsSame":
@@ -578,6 +637,8 @@ namespace SqlSugar
                         return this.Context.DbMehtods.AggregateMax(model);
                     case "AggregateCount":
                         return this.Context.DbMehtods.AggregateCount(model);
+                    case "AggregateDistinctCount":
+                        return this.Context.DbMehtods.AggregateDistinctCount(model);
                     case "MappingColumn":
                         var mappingColumnResult = this.Context.DbMehtods.MappingColumn(model);
                         var isValid = model.Args[0].IsMember && model.Args[1].IsMember == false;

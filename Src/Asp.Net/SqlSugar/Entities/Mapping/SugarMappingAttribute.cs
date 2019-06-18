@@ -112,6 +112,13 @@ namespace SqlSugar
             set { _IsOnlyIgnoreInsert = value; }
         }
 
+        private bool _IsOnlyIgnoreUpdate;
+        public bool IsOnlyIgnoreUpdate
+        {
+            get { return _IsOnlyIgnoreUpdate; }
+            set { _IsOnlyIgnoreUpdate = value; }
+        }
+
 
         private bool _IsEnableUpdateVersionValidation;
         public bool IsEnableUpdateVersionValidation {
@@ -148,6 +155,22 @@ namespace SqlSugar
             get { return _IsJson; }
             set { _IsJson = value; }
         }
+
+
+        private string _DefaultValue;
+        public string DefaultValue
+        {
+            get { return _DefaultValue; }
+            set { _DefaultValue = value; }
+        }
+
+        private string[] _IndexGroupNameList;
+        public string[] IndexGroupNameList
+        {
+            get { return _IndexGroupNameList; }
+            set { _IndexGroupNameList = value; }
+        }
+
     }
 
 }

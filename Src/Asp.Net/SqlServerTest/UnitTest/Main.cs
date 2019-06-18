@@ -23,8 +23,17 @@ namespace OrmTest
                 }
             }
         });
+
+        public static void RestData()
+        {
+            Db.DbMaintenance.TruncateTable<Order>();
+            Db.DbMaintenance.TruncateTable<OrderItem>();
+        }
         public static void Init()
         {
+            Queue();
+            CodeFirst();
+            Updateable();
             Json();
             Ado();
             Queryable();

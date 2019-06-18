@@ -169,8 +169,7 @@ namespace SqlSugar
             }
             else if (propertyTypes == null || propertyTypes.Count() == 0)
             {
-                Check.ThrowNotSupportedException(string.Format(" \"{0}\" Type NotSupported, DbBindProvider.GetPropertyTypeName error.", dbTypeName));
-                return null;
+                return "object";
             }
             else if (propertyTypes.First().Value == CSharpDataType.byteArray)
             {
@@ -185,7 +184,7 @@ namespace SqlSugar
         {
             using (dataReader)
             {
-                if (type.Name.Contains("KeyValuePair"))
+                if (type.Name.StartsWith("KeyValuePair"))
                 {
                     return GetKeyValueList<T>(type, dataReader);
                 }
@@ -207,7 +206,7 @@ namespace SqlSugar
         {
             using (dataReader)
             {
-                if (type.Name.Contains("KeyValuePair"))
+                if (type.Name.StartsWith("KeyValuePair"))
                 {
                     return await GetKeyValueListAsync<T>(type, dataReader);
                 }
@@ -227,7 +226,7 @@ namespace SqlSugar
         }
         public virtual List<T> DataReaderToListNoUsing<T>(Type type, IDataReader dataReader)
         {
-            if (type.Name.Contains("KeyValuePair"))
+            if (type.Name.StartsWith("KeyValuePair"))
             {
                 return GetKeyValueList<T>(type, dataReader);
             }
@@ -246,7 +245,7 @@ namespace SqlSugar
         }
         public virtual Task<List<T>> DataReaderToListNoUsingAsync<T>(Type type, IDataReader dataReader)
         {
-            if (type.Name.Contains("KeyValuePair"))
+            if (type.Name.StartsWith("KeyValuePair"))
             {
                 return GetKeyValueListAsync<T>(type, dataReader);
             }

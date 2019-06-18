@@ -86,31 +86,7 @@ namespace SqlSugar
         {
             get
             {
-                return @"
-create database {0}  
-on primary 
-(
-    name = N'{0}',
-    filename=N'{1}\{0}.mdf',
-    size=10mb,
-    maxsize=100mb,
-    filegrowth=1mb
-),
-(
-    name=N'{0}_ndf',   
-    filename=N'{1}\{0}.ndf',
-    size=10mb,
-    maxsize=100mb,
-     filegrowth=10%
-)
-log on  --逻辑文件
-(
-    name=N'{0}_log',  
-    filename=N'{1}\{0}.ldf', 
-    size=100mb,
-    maxsize=1gb,
-    filegrowth=10mb
-);";
+                return @"create database {0}  ";
             }
         }
         protected override string AddPrimaryKeySql
@@ -197,48 +173,6 @@ log on  --逻辑文件
                 return "exec sp_rename '{0}.{1}','{2}','column';";
             }
         }
-        #endregion
-
-        #region Check
-        protected override string CheckSystemTablePermissionsSql
-        {
-            get
-            {
-                return "select top 1 id from sysobjects";
-            }
-        }
-        #endregion
-
-        #region Scattered
-        protected override string CreateTableNull
-        {
-            get
-            {
-                return "NULL";
-            }
-        }
-        protected override string CreateTableNotNull
-        {
-            get
-            {
-                return "NOT NULL";
-            }
-        }
-        protected override string CreateTablePirmaryKey
-        {
-            get
-            {
-                return "PRIMARY KEY";
-            }
-        }
-        protected override string CreateTableIdentity
-        {
-            get
-            {
-                return "IDENTITY(1,1)";
-            }
-        }
-
         protected override string AddColumnRemarkSql
         {
             get
@@ -311,7 +245,73 @@ log on  --逻辑文件
             }
         }
 
+        protected override string CreateIndexSql
+        {
+            get
+            {
+                return "CREATE NONCLUSTERED INDEX Index_{0}_{2} ON {0}({1})";
+            }
+        }
+        protected override string AddDefaultValueSql
+        {
+            get
+            {
+                return "alter table {0} ADD DEFAULT '{2}' FOR {1}";
+            }
+        }
+        protected override string IsAnyIndexSql
+        {
+            get
+            {
+                return "select count(*) from sys.indexes where name='{0}'";
+            }
+        }
         #endregion
+
+        #region Check
+        protected override string CheckSystemTablePermissionsSql
+        {
+            get
+            {
+                return "select top 1 id from sysobjects";
+            }
+        }
+        #endregion
+
+        #region Scattered
+        protected override string CreateTableNull
+        {
+            get
+            {
+                return "NULL";
+            }
+        }
+        protected override string CreateTableNotNull
+        {
+            get
+            {
+                return "NOT NULL";
+            }
+        }
+        protected override string CreateTablePirmaryKey
+        {
+            get
+            {
+                return "PRIMARY KEY";
+            }
+        }
+        protected override string CreateTableIdentity
+        {
+            get
+            {
+                return "IDENTITY(1,1)";
+            }
+        }
+
+        #endregion
+
+        #region Methods
+
         /// <summary>
         ///by current connection string
         /// </summary>
@@ -329,14 +329,42 @@ log on  --逻辑文件
             var oldDatabaseName = this.Context.Ado.Connection.Database;
             var connection = this.Context.CurrentConnectionConfig.ConnectionString;
             connection = connection.Replace(oldDatabaseName, "master");
-            var newDb = new SqlSugarClient(new ConnectionConfig() {
+            var newDb = new SqlSugarClient(new ConnectionConfig()
+            {
                 DbType = this.Context.CurrentConnectionConfig.DbType,
                 IsAutoCloseConnection = true,
                 ConnectionString = connection
             });
             if (!GetDataBaseList(newDb).Any(it => it.Equals(databaseName, StringComparison.CurrentCultureIgnoreCase)))
             {
-                newDb.Ado.ExecuteCommand(string.Format(CreateDataBaseSql, databaseName, databaseDirectory));
+                var sql = CreateDataBaseSql;
+                if (databaseDirectory.HasValue())
+                {
+                    sql += @"on primary 
+                                        (
+                                            name = N'{0}',
+                                            filename = N'{1}\{0}.mdf',
+                                            size = 10mb,
+                                            maxsize = 100mb,
+                                            filegrowth = 1mb
+                                        ),
+                                        (
+                                            name = N'{0}_ndf',   
+                                            filename = N'{1}\{0}.ndf',
+                                            size = 10mb,
+                                            maxsize = 100mb,
+                                             filegrowth = 10 %
+                                        )
+                                        log on  
+                                        (
+                                            name = N'{0}_log',
+                                            filename = N'{1}\{0}.ldf',
+                                            size = 100mb,
+                                            maxsize = 1gb,
+                                            filegrowth = 10mb
+                                        ); ";
+                }
+                newDb.Ado.ExecuteCommand(string.Format(sql, databaseName, databaseDirectory));
             }
             return true;
         }
@@ -350,7 +378,7 @@ log on  --逻辑文件
                 var pkColumns = columns.Where(it => it.IsPrimarykey).ToList();
                 if (pkColumns.Count > 1)
                 {
-                    this.Context.DbMaintenance.AddPrimaryKeys(tableName, pkColumns.Select(it=>it.DbColumnName).ToArray());
+                    this.Context.DbMaintenance.AddPrimaryKeys(tableName, pkColumns.Select(it => it.DbColumnName).ToArray());
                 }
                 else
                 {
@@ -362,7 +390,6 @@ log on  --逻辑文件
             }
             return true;
         }
-
         public override bool RenameColumn(string tableName, string oldColumnName, string newColumnName)
         {
             tableName = this.SqlBuilder.GetTranslationTableName(tableName);
@@ -371,6 +398,7 @@ log on  --逻辑文件
             string sql = string.Format(this.RenameColumnSql, tableName, oldColumnName, newColumnName);
             this.Context.Ado.ExecuteCommand(sql);
             return true;
-        }
+        } 
+        #endregion
     }
 }

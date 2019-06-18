@@ -320,36 +320,6 @@ namespace SqlSugar
                 throw ex;
             }
         }
-        public virtual IDataReader GetDataReaderNoClose(string sql, params SugarParameter[] parameters)
-        {
-            try
-            {
-                InitParameters(ref sql, parameters);
-                if (FormatSql != null)
-                    sql = FormatSql(sql);
-                SetConnectionStart(sql);
-                var isSp = this.CommandType == CommandType.StoredProcedure;
-                if (this.ProcessingEventStartingSQL != null)
-                    ExecuteProcessingSQL(ref sql, parameters);
-                ExecuteBefore(sql, parameters);
-                IDbCommand sqlCommand = GetCommand(sql, parameters);
-                IDataReader sqlDataReader = sqlCommand.ExecuteReader();
-                if (isSp)
-                    DataReaderParameters = sqlCommand.Parameters;
-                if (this.IsClearParameters)
-                    sqlCommand.Parameters.Clear();
-                ExecuteAfter(sql, parameters);
-                SetConnectionEnd(sql);
-                return sqlDataReader;
-            }
-            catch (Exception ex)
-            {
-                CommandType = CommandType.Text;
-                if (ErrorEvent != null)
-                    ExecuteErrorEvent(sql, parameters, ex);
-                throw ex;
-            }
-        }
         public virtual DataSet GetDataSetAll(string sql, params SugarParameter[] parameters)
         {
             try
@@ -421,6 +391,7 @@ namespace SqlSugar
         {
             try
             {
+                Async();
                 InitParameters(ref sql, parameters);
                 if (FormatSql != null)
                     sql = FormatSql(sql);
@@ -452,6 +423,7 @@ namespace SqlSugar
         {
             try
             {
+                Async();
                 InitParameters(ref sql, parameters);
                 if (FormatSql != null)
                     sql = FormatSql(sql);
@@ -478,40 +450,11 @@ namespace SqlSugar
                 throw ex;
             }
         }
-        public virtual async Task<IDataReader> GetDataReaderNoCloseAsync(string sql, params SugarParameter[] parameters)
-        {
-            try
-            {
-                InitParameters(ref sql, parameters);
-                if (FormatSql != null)
-                    sql = FormatSql(sql);
-                SetConnectionStart(sql);
-                var isSp = this.CommandType == CommandType.StoredProcedure;
-                if (this.ProcessingEventStartingSQL != null)
-                    ExecuteProcessingSQL(ref sql, parameters);
-                ExecuteBefore(sql, parameters);
-                var sqlCommand = GetCommand(sql, parameters);
-                var sqlDataReader = await sqlCommand.ExecuteReaderAsync();
-                if (isSp)
-                    DataReaderParameters = sqlCommand.Parameters;
-                if (this.IsClearParameters)
-                    sqlCommand.Parameters.Clear();
-                ExecuteAfter(sql, parameters);
-                SetConnectionEnd(sql);
-                return sqlDataReader;
-            }
-            catch (Exception ex)
-            {
-                CommandType = CommandType.Text;
-                if (ErrorEvent != null)
-                    ExecuteErrorEvent(sql, parameters, ex);
-                throw ex;
-            }
-        }
         public virtual async Task<object> GetScalarAsync(string sql, params SugarParameter[] parameters)
         {
             try
             {
+                Async();
                 InitParameters(ref sql, parameters);
                 if (FormatSql != null)
                     sql = FormatSql(sql);
@@ -542,6 +485,7 @@ namespace SqlSugar
         }
         public virtual Task<DataSet> GetDataSetAllAsync(string sql, params SugarParameter[] parameters)
         {
+            Async();
             //False asynchrony . No Support DataSet
             return Task.FromResult(GetDataSetAll(sql, parameters));
         }
@@ -828,7 +772,7 @@ namespace SqlSugar
             builder.SqlQueryBuilder.sql.Append(sql);
             if (parsmeterArray != null && parsmeterArray.Any())
                 builder.SqlQueryBuilder.Parameters.AddRange(parsmeterArray);
-            using (var dataReader = this.GetDataReaderNoClose(builder.SqlQueryBuilder.ToSqlString(), builder.SqlQueryBuilder.Parameters.ToArray()))
+            using (var dataReader = this.GetDataReader(builder.SqlQueryBuilder.ToSqlString(), builder.SqlQueryBuilder.Parameters.ToArray()))
             {
                 DbDataReader DbReader = (DbDataReader)dataReader;
                 List<T> result = new List<T>();
@@ -837,45 +781,39 @@ namespace SqlSugar
                     result = GetData<T>(typeof(T), dataReader);
                 }
                 List<T2> result2 = null;
-                if (DbReader.HasRows)
+                if (NextResult(dataReader))
                 {
                     this.Context.InitMappingInfo<T2>();
-                    NextResult(dataReader);
                     result2 = GetData<T2>(typeof(T2), dataReader);
                 }
                 List<T3> result3 = null;
-                if (DbReader.HasRows)
+                if (NextResult(dataReader))
                 {
                     this.Context.InitMappingInfo<T3>();
-                    NextResult(dataReader);
                     result3 = GetData<T3>(typeof(T3), dataReader);
                 }
                 List<T4> result4 = null;
-                if (DbReader.HasRows)
+                if (NextResult(dataReader))
                 {
                     this.Context.InitMappingInfo<T4>();
-                    NextResult(dataReader);
                     result4 = GetData<T4>(typeof(T4), dataReader);
                 }
                 List<T5> result5 = null;
-                if (DbReader.HasRows)
+                if (NextResult(dataReader))
                 {
                     this.Context.InitMappingInfo<T5>();
-                    NextResult(dataReader);
                     result5 = GetData<T5>(typeof(T5), dataReader);
                 }
                 List<T6> result6 = null;
-                if (DbReader.HasRows)
+                if (NextResult(dataReader))
                 {
                     this.Context.InitMappingInfo<T6>();
-                    NextResult(dataReader);
                     result6 = GetData<T6>(typeof(T6), dataReader);
                 }
                 List<T7> result7 = null;
-                if (DbReader.HasRows)
+                if (NextResult(dataReader))
                 {
                     this.Context.InitMappingInfo<T7>();
-                    NextResult(dataReader);
                     result7 = GetData<T7>(typeof(T7), dataReader);
                 }
                 builder.SqlQueryBuilder.Clear();
@@ -894,7 +832,6 @@ namespace SqlSugar
                 return Tuple.Create<List<T>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>, List<T7>>(result, result2, result3, result4, result5, result6, result7);
             }
         }
-
         public virtual Task<List<T>> SqlQueryAsync<T>(string sql, object parameters = null)
         {
             var sugarParameters = this.GetParameters(parameters);
@@ -949,7 +886,7 @@ namespace SqlSugar
             builder.SqlQueryBuilder.sql.Append(sql);
             if (parsmeterArray != null && parsmeterArray.Any())
                 builder.SqlQueryBuilder.Parameters.AddRange(parsmeterArray);
-            using (var dataReader = await this.GetDataReaderNoCloseAsync(builder.SqlQueryBuilder.ToSqlString(), builder.SqlQueryBuilder.Parameters.ToArray()))
+            using (var dataReader = await this.GetDataReaderAsync(builder.SqlQueryBuilder.ToSqlString(), builder.SqlQueryBuilder.Parameters.ToArray()))
             {
                 DbDataReader DbReader = (DbDataReader)dataReader;
                 List<T> result = new List<T>();
@@ -958,45 +895,39 @@ namespace SqlSugar
                     result =await GetDataAsync<T>(typeof(T), dataReader);
                 }
                 List<T2> result2 = null;
-                if (DbReader.HasRows)
+                if (NextResult(dataReader))
                 {
                     this.Context.InitMappingInfo<T2>();
-                    NextResult(dataReader);
                     result2 = await GetDataAsync<T2>(typeof(T2), dataReader);
                 }
                 List<T3> result3 = null;
-                if (DbReader.HasRows)
+                if (NextResult(dataReader))
                 {
                     this.Context.InitMappingInfo<T3>();
-                    NextResult(dataReader);
                     result3 = await GetDataAsync<T3>(typeof(T3), dataReader);
                 }
                 List<T4> result4 = null;
-                if (DbReader.HasRows)
+                if (NextResult(dataReader))
                 {
                     this.Context.InitMappingInfo<T4>();
-                    NextResult(dataReader);
                     result4 = await GetDataAsync<T4>(typeof(T4), dataReader);
                 }
                 List<T5> result5 = null;
-                if (DbReader.HasRows)
+                if (NextResult(dataReader))
                 {
                     this.Context.InitMappingInfo<T5>();
-                    NextResult(dataReader);
                     result5 = await GetDataAsync<T5>(typeof(T5), dataReader);
                 }
                 List<T6> result6 = null;
-                if (DbReader.HasRows)
+                if (NextResult(dataReader))
                 {
                     this.Context.InitMappingInfo<T6>();
-                    NextResult(dataReader);
                     result6 = await GetDataAsync<T6>(typeof(T6), dataReader);
                 }
                 List<T7> result7 = null;
-                if (DbReader.HasRows)
+                if (NextResult(dataReader))
                 {
                     this.Context.InitMappingInfo<T7>();
-                    NextResult(dataReader);
                     result7 = await GetDataAsync<T7>(typeof(T7), dataReader);
                 }
                 builder.SqlQueryBuilder.Clear();
@@ -1225,17 +1156,25 @@ namespace SqlSugar
         #endregion
 
         #region  Helper
-        private static void NextResult(IDataReader dataReader)
+        private void Async()
+        {
+            if (this.Context.Root != null & this.Context.Root.AsyncId == null)
+            {
+                this.Context.Root.AsyncId = Guid.NewGuid(); ;
+            }
+        }
+        private static bool NextResult(IDataReader dataReader)
         {
             try
             {
-                dataReader.NextResult();
+                return dataReader.NextResult();
             }
-            catch
+            catch  
             {
-                Check.Exception(true, ErrorMessage.GetThrowMessage("Please reduce the number of T. Save Queue Changes queries don't have so many results", "请减少T的数量，SaveQueueChanges 查询没有这么多结果"));
+                return false;
             }
         }
+
         private void ExecuteProcessingSQL(ref string sql, SugarParameter[] parameters)
         {
             var result = this.ProcessingEventStartingSQL(sql, parameters);

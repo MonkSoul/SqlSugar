@@ -22,6 +22,8 @@ namespace SqlSugar
         private MappingColumnList _MappingColumns;
         private IgnoreColumnList _IgnoreColumns;
         private IgnoreColumnList _IgnoreInsertColumns;
+        internal Guid? AsyncId { get; set; }
+        internal bool? IsSingleInstance { get; set; }
 
         #endregion
 
@@ -45,17 +47,17 @@ namespace SqlSugar
         #endregion
 
         #region Global variable
-        public SqlSugarProvider Context { get => GetContext(); }
+        public SqlSugarProvider Context { get { return GetContext(); } }
         public bool IsSystemTablesConfig => this.Context.IsSystemTablesConfig;
-        public ConnectionConfig CurrentConnectionConfig { get => _CurrentConnectionConfig; set => _CurrentConnectionConfig = value; }
-        public Guid ContextID { get => this.Context.ContextID; set => this.Context.ContextID = value; }
+        public ConnectionConfig CurrentConnectionConfig { get { return _CurrentConnectionConfig; } set { _CurrentConnectionConfig = value; } }
+        public Guid ContextID { get { return this.Context.ContextID; } set { this.Context.ContextID = value; } }
 
 
-        public MappingTableList MappingTables { get => _MappingTables; set => _MappingTables = value; }
-        public MappingColumnList MappingColumns { get => _MappingColumns; set => _MappingColumns = value; }
-        public IgnoreColumnList IgnoreColumns { get => _IgnoreColumns; set => _IgnoreColumns = value; }
-        public IgnoreColumnList IgnoreInsertColumns { get => _IgnoreInsertColumns; set => _IgnoreInsertColumns = value; }
-        public Dictionary<string, object> TempItems { get => this.Context.TempItems; set => this.Context.TempItems = value; }
+        public MappingTableList MappingTables { get { return _MappingTables; } set {  _MappingTables = value; } }
+        public MappingColumnList MappingColumns { get { return _MappingColumns; } set { _MappingColumns = value; } }
+        public IgnoreColumnList IgnoreColumns { get { return _IgnoreColumns; } set { _IgnoreColumns = value; } }
+        public IgnoreColumnList IgnoreInsertColumns { get { return _IgnoreInsertColumns; } set { _IgnoreInsertColumns = value; } }
+        public Dictionary<string, object> TempItems { get { return this.Context.TempItems; } set { this.Context.TempItems = value; } }
         #endregion
 
         #region SimpleClient
@@ -340,7 +342,7 @@ namespace SqlSugar
         #endregion
 
         #region Queue
-        public QueueList Queues { get => this.Context.Queues; set => this.Context.Queues = value; }
+        public QueueList Queues { get { return this.Context.Queues; } set { this.Context.Queues = value; } }
         public void AddQueue(string sql, object parsmeters = null)
         {
             this.Context.AddQueue(sql, parsmeters);
@@ -524,13 +526,13 @@ namespace SqlSugar
         #endregion
 
         #region More api
-        public IContextMethods Utilities { get => this.Context.Utilities; set => this.Context.Utilities = value; }
+        public IContextMethods Utilities { get { return this.Context.Utilities; } set { this.Context.Utilities = value; } }
         public AopProvider Aop => this.Context.Aop;
         public ICodeFirst CodeFirst => this.Context.CodeFirst;
         public IDbFirst DbFirst => this.Context.DbFirst;
         public IDbMaintenance DbMaintenance => this.Context.DbMaintenance;
-        public EntityMaintenance EntityMaintenance { get => this.Context.EntityMaintenance; set => this.Context.EntityMaintenance = value; }
-        public QueryFilterProvider QueryFilter { get => this.Context.QueryFilter; set => this.Context.QueryFilter = value; }
+        public EntityMaintenance EntityMaintenance { get { return this.Context.EntityMaintenance; } set { this.Context.EntityMaintenance = value; } }
+        public QueryFilterProvider QueryFilter { get { return this.Context.QueryFilter; }set { this.Context.QueryFilter = value; } }
         #endregion
 
         #region TenantManager
@@ -671,16 +673,44 @@ namespace SqlSugar
         #region Helper
         private SqlSugarProvider GetContext()
         {
+            SqlSugarProvider result = null;
             if (IsSameThreadAndShard())
-                return SameThreadAndShard();
+            {
+                result = SameThreadAndShard();
+            }
             else if (IsNoSameThreadAndShard())
-                return NoSameThreadAndShard();
+            {
+                result = NoSameThreadAndShard();
+            }
             else if (IsSynchronization())
-                return Synchronization();
+            {
+                result = Synchronization();
+            }
+            else if (IsSingleInstanceAsync())
+            {
+                result = NoSameThreadAsync();
+            }
+            else if (IsAsync())
+            {
+                result = Synchronization();
+            }
             else
-                return NoSameThread();
+            {
+                IsSingleInstance = true;
+                result = NoSameThread();
+            }
+            if (result.Root == null)
+            {
+                result.Root = this;
+            }
+            return result;
         }
 
+        private SqlSugarProvider NoSameThreadAsync()
+        {
+            var result = GetCallContext();
+            return result;
+        }
         private SqlSugarProvider NoSameThread()
         {
             if (CallContext.ContextList.Value == null)
@@ -761,6 +791,15 @@ namespace SqlSugar
             }
         }
 
+        private bool IsAsync()
+        {
+            return AsyncId != null;
+        }
+
+        private bool IsSingleInstanceAsync()
+        {
+            return IsSingleInstance == true && AsyncId != null;
+        }
 
         private bool IsSynchronization()
         {
@@ -859,11 +898,11 @@ namespace SqlSugar
 
         #region Obsolete
         [Obsolete("Use EntityMaintenance")]
-        public EntityMaintenance EntityProvider { get => this.Context.EntityProvider; set => this.Context.EntityProvider = value; }
+        public EntityMaintenance EntityProvider { get { return this.Context.EntityProvider; } set { this.Context.EntityProvider = value; } }
         [Obsolete("Use Utilities")]
-        public IContextMethods RewritableMethods { get => this.Context.RewritableMethods; set => this.Context.RewritableMethods = value; }
+        public IContextMethods RewritableMethods { get { return this.Context.RewritableMethods; } set { this.Context.RewritableMethods = value; } }
         [Obsolete("Use GetSimpleClient")]
-        public SimpleClient SimpleClient => this.Context.SimpleClient;
+        public SimpleClient SimpleClient { get { return this.Context.SimpleClient; } }
         #endregion
 
     }

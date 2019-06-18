@@ -33,6 +33,7 @@ namespace SqlSugar
         public bool IsEnableDiffLogEvent { get; set; }
         public DiffLogModel diffModel { get; set; }
         private Action RemoveCacheFunc { get; set; }
+        private int SetColumnsIndex { get; set; }
         #endregion
 
         #region Core
@@ -120,6 +121,7 @@ namespace SqlSugar
 
         public IUpdateable<T> IgnoreColumns(bool ignoreAllNullColumns, bool isOffIdentity = false,bool ignoreAllDefaultValue = false)
         {
+            Check.Exception(this.UpdateObjs.Count() > 1 && ignoreAllNullColumns, ErrorMessage.GetThrowMessage("ignoreNullColumn NoSupport batch insert", "ignoreNullColumn 不支持批量操作"));
             UpdateBuilder.IsOffIdentity = isOffIdentity;
             if (this.UpdateBuilder.LambdaExpressions == null)
                 this.UpdateBuilder.LambdaExpressions = InstanceFactory.GetLambdaExpressions(this.Context.CurrentConnectionConfig);
@@ -138,7 +140,7 @@ namespace SqlSugar
         {
             if (columns.HasValue())
             {
-                var ignoreColumns = columns;
+                var ignoreColumns = columns.Select(it => it.ToLower()).ToList() ;
                 this.UpdateBuilder.DbColumnInfoList = this.UpdateBuilder.DbColumnInfoList.Where(it => !ignoreColumns.Contains(it.PropertyName.ToLower())).ToList();
                 this.UpdateBuilder.DbColumnInfoList = this.UpdateBuilder.DbColumnInfoList.Where(it => !ignoreColumns.Contains(it.DbColumnName.ToLower())).ToList();
             }
@@ -154,9 +156,10 @@ namespace SqlSugar
             LambdaExpression lambda = setValueExpression as LambdaExpression;
             var expression = lambda.Body;
             Check.Exception(!(expression is BinaryExpression), "Expression  format error");
+            Check.Exception( (expression as BinaryExpression).NodeType!=ExpressionType.Equal, "Expression  format error");
             var leftExpression = (expression as BinaryExpression).Left;
             Check.Exception(!(leftExpression is MemberExpression), "Expression  format error");
-            var leftResultString = UpdateBuilder.GetExpressionValue(leftExpression, ResolveExpressType.WhereSingle).GetString();
+            var leftResultString = UpdateBuilder.GetExpressionValue(leftExpression, ResolveExpressType.FieldSingle).GetString();
             UpdateBuilder.SetValues.Add(new KeyValuePair<string, string>(leftResultString, resultString));
             return this;
         }
@@ -165,6 +168,7 @@ namespace SqlSugar
         public IUpdateable<T> WhereColumns(Expression<Func<T, object>> columns)
         {
             this.IsWhereColumns = true;
+            UpdateBuilder.IsWhereColumns = true;
             Check.Exception(UpdateParameterIsNull == true, "Updateable<T>().Updateable is error,Use Updateable(obj).WhereColumns");
             var whereColumns = UpdateBuilder.GetExpressionValue(columns, ResolveExpressType.ArraySingle).GetResultArray().Select(it => this.SqlBuilder.GetNoTranslationColumnName(it)).ToList();
             if (this.WhereColumnList == null) this.WhereColumnList = new List<string>();
@@ -227,6 +231,7 @@ namespace SqlSugar
             }
             this.UpdateBuilder.DbColumnInfoList = UpdateBuilder.DbColumnInfoList.Where(it => (UpdateParameterIsNull==false&&IsPrimaryKey(it)) || UpdateBuilder.SetValues.Any(v => SqlBuilder.GetNoTranslationColumnName(v.Key).Equals(it.DbColumnName, StringComparison.CurrentCultureIgnoreCase) || SqlBuilder.GetNoTranslationColumnName(v.Key).Equals(it.PropertyName, StringComparison.CurrentCultureIgnoreCase)) || it.IsPrimarykey == true).ToList();
             CheckTranscodeing();
+            AppendSets();
             return this;
         }
 
@@ -241,9 +246,9 @@ namespace SqlSugar
             string key = SqlBuilder.GetNoTranslationColumnName(expResult);
             UpdateBuilder.SetValues.Add(new KeyValuePair<string, string>(SqlBuilder.GetTranslationColumnName(key), expResult));
             this.UpdateBuilder.DbColumnInfoList = this.UpdateBuilder.DbColumnInfoList.Where(it => (UpdateParameterIsNull == false && IsPrimaryKey(it)) || UpdateBuilder.SetValues.Any(v => SqlBuilder.GetNoTranslationColumnName(v.Key).Equals(it.DbColumnName, StringComparison.CurrentCultureIgnoreCase) || SqlBuilder.GetNoTranslationColumnName(v.Key).Equals(it.PropertyName, StringComparison.CurrentCultureIgnoreCase)) || it.IsPrimarykey == true).ToList();
+            AppendSets();
             return this;
         }
-
 
         public IUpdateable<T> UpdateColumnsIF(bool isUpdateColumns, Expression<Func<T, object>> columns)
         {
@@ -369,6 +374,17 @@ namespace SqlSugar
         #endregion
 
         #region Helper
+        private void AppendSets()
+        {
+            if (SetColumnsIndex > 0)
+            {
+                var keys = UpdateBuilder.SetValues.Select(it => SqlBuilder.GetNoTranslationColumnName(it.Key.ToLower())).ToList();
+                var addKeys = keys.Where(k => !this.UpdateBuilder.DbColumnInfoList.Any(it => it.PropertyName.ToLower() == k || it.DbColumnName.ToLower() == k)).ToList();
+                var addItems = this.EntityInfo.Columns.Where(it =>!GetPrimaryKeys().Any(p=>p.ToLower()==it.PropertyName?.ToLower()|| p.ToLower() == it.DbColumnName?.ToLower()) && addKeys.Any(k => it.PropertyName?.ToLower() == k || it.DbColumnName?.ToLower() == k)).ToList();
+                this.UpdateBuilder.DbColumnInfoList.AddRange(addItems.Select(it => new DbColumnInfo() { PropertyName = it.PropertyName, DbColumnName = it.DbColumnName }));
+            }
+            SetColumnsIndex++;
+        }
         private string _ExecuteCommand()
         {
             PreToSql();
@@ -620,21 +636,21 @@ namespace SqlSugar
                     Check.Exception(dbVersion == null, "UpdateVersionValidation database column {0} is not null", versionColumn.DbColumnName);
                     if (versionColumn.PropertyInfo.PropertyType.IsIn(UtilConstants.IntType, UtilConstants.LongType))
                     {
-                        if (Convert.ToInt64(dbVersion) > Convert.ToInt64(currentVersion))
+                        if (Convert.ToInt64(dbVersion) != Convert.ToInt64(currentVersion))
                         {
                             throw new VersionExceptions(string.Format("UpdateVersionValidation {0} Not the latest version ", versionColumn.PropertyName));
                         }
                     }
                     else if (versionColumn.PropertyInfo.PropertyType.IsIn(UtilConstants.DateType))
                     {
-                        if (dbVersion.ObjToDate() > currentVersion.ObjToDate())
+                        if (dbVersion.ObjToDate() != currentVersion.ObjToDate())
                         {
                             throw new VersionExceptions(string.Format("UpdateVersionValidation {0} Not the latest version ", versionColumn.PropertyName));
                         }
                     }
                     else if (versionColumn.PropertyInfo.PropertyType.IsIn(UtilConstants.ByteArrayType))
                     {
-                        if (UtilMethods.GetLong((byte[])dbVersion) > UtilMethods.GetLong((byte[])currentVersion))
+                        if (UtilMethods.GetLong((byte[])dbVersion) != UtilMethods.GetLong((byte[])currentVersion))
                         {
                             throw new VersionExceptions(string.Format("UpdateVersionValidation {0} Not the latest version ", versionColumn.PropertyName));
                         }
